@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>baby蓝滑动拼图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #dff0ff 0%, #bfe3ff 50%, #d6ecff 100%);
+    overflow: hidden;
+  }
+
+  /* ====== 难度选择页 ====== */
+  #menuPage { width: min(92vw, 460px); text-align: center; }
+  #menuPage h1 { font-size: 26px; color: #1e4a72; margin-bottom: 8px; letter-spacing: 2px; }
+  #menuPage p { font-size: 14px; color: #5b87ad; margin-bottom: 32px; }
+  .level-btn {
+    display: block; width: 100%; padding: 20px; margin-bottom: 16px;
+    border: none; border-radius: 20px; cursor: pointer;
+    background: rgba(255,255,255,0.85);
+    box-shadow: 0 8px 24px rgba(120,180,240,0.25);
+    font-size: 18px; font-weight: 600; color: #1e4a72;
+    transition: transform .2s, box-shadow .2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .level-btn:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(120,180,240,0.4); }
+  .level-btn:active { transform: scale(0.97); }
+  .level-btn small { display: block; font-size: 12px; color: #7aa7c9; font-weight: 400; margin-top: 4px; }
+
+  /* ====== 拼图页 ====== */
+  #gamePage { display: none; width: min(92vw, 460px); text-align: center; }
+  #gamePage.show { display: block; }
+  .top-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; color: #1e4a72; font-size: 15px; font-weight: 600;
+  }
+  .top-bar button {
+    border: none; background: rgba(255,255,255,0.85); color: #1e4a72;
+    padding: 8px 16px; border-radius: 12px; cursor: pointer; font-size: 14px;
+    box-shadow: 0 4px 12px rgba(120,180,240,0.25);
+  }
+  #board {
+    display: grid; gap: 3px;
+    background: rgba(255,255,255,0.6);
+    padding: 8px; border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(120,170,220,0.3);
+    aspect-ratio: 1 / 1;
+    user-select: none;
+  }
+  .tile {
+    border-radius: 6px;
+    background-size: cover; background-repeat: no-repeat;
+    transition: transform .12s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tile.blank { background: transparent; }
+  .tile.slide { animation: slideIn .15s ease; }
+  @keyframes slideIn { from { transform: scale(0.92); } to { transform: scale(1); } }
+
+  /* ====== 通关弹图 ====== */
+  #winOverlay {
+    position: fixed; inset: 0; z-index: 999;
+    background: rgba(20,50,80,0.75);
+    display: none; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  #winOverlay.show { display: flex; }
+  #winOverlay img {
+    max-width: 100%; max-height: 80vh;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    animation: pop .5s ease;
+  }
+  @keyframes pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  #winOverlay .close-hint {
+    position: absolute; bottom: 30px; left: 0; right: 0;
+    text-align: center; color: rgba(255,255,255,0.7); font-size: 14px;
+    animation: breathe 2s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<!-- ====== 难度选择 ====== -->
+<div id="menuPage">
+  <h1>🧩 baby蓝拼图</h1>
+  <p>滑动拼图 · 选个难度开始吧</p >
+  <button class="level-btn" data-n="3">3 × 3 轻松<small>9 格 · 适合休闲</small></button>
+  <button class="level-btn" data-n="4">4 × 4 进阶<small>16 格 · 有点挑战</small></button>
+  <button class="level-btn" data-n="5">5 × 5 挑战<small>25 格 · 拼图高手</small></button>
+</div>
+
+<!-- ====== 拼图游戏 ====== -->
+<div id="gamePage">
+  <div class="top-bar">
+    <button id="backBtn">← 返回</button>
+    <span id="levelLabel"></span>
+    <button id="shuffleBtn">重新打乱</button>
+  </div>
+  <div id="board"></div>
+</div>
+
+<!-- ====== 通关弹图 ====== -->
+<div id="winOverlay">
+  <img id="winImg" src="" alt="通关奖励">
+  <div class="close-hint">点击任意处关闭</div>
+</div>
+
+<script>
+  // ====== 三个难度对应三张图（改成你的文件名） ======
+  const PUZZLE_IMAGES = {
+    3: 'puzzle3.jpg',   // 3×3 用的图
+    4: 'puzzle4.jpg',   // 4×4 用的图
+    5: 'puzzle5.jpg'    // 5×5 用的图
+  };
+  // ====== 三个难度通关后弹出的图（改成你的文件名） ======
+  const WIN_IMAGES = {
+    3: 'win3.jpg',
+    4: 'win4.jpg',
+    5: 'win5.jpg'
+  };
+
+  let size = 3;
+  let tiles = [];        // 当前排列，值为 tile 编号，空位用 -1 表示
+  let blankPos = 0;      // 空位在数组中的位置
+  let solved = false;
+
+  const menuPage = document.getElementById('menuPage');
+  const gamePage = document.getElementById('gamePage');
+  const board = document.getElementById('board');
+  const levelLabel = document.getElementById('levelLabel');
+  const backBtn = document.getElementById('backBtn');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const winOverlay = document.getElementById('winOverlay');
+  const winImg = document.getElementById('winImg');
+
+  document.querySelectorAll('.level-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      size = parseInt(btn.dataset.n, 10);
+      startGame();
+    });
+  });
+
+  function startGame() {
+    menuPage.style.display = 'none';
+    gamePage.classList.add('show');
+    levelLabel.textContent = `${size} × ${size}`;
+    solved = false;
+    winOverlay.classList.remove('show');
+    initTiles();
+    shuffleTiles();
+    renderBoard();
+  }
+
+  // 初始化：0..n*n-2 为拼图块，-1 为空位
+  function initTiles() {
+    const total = size * size;
+    tiles = [];
+    for (let i = 0; i < total - 1; i++) tiles.push(i);
+    tiles.push(-1);
+    blankPos = total - 1;
+  }
+
+  // 华容道打乱：从还原状态开始，随机滑动空位若干次，保证可解
+  function shuffleTiles() {
+    // 先还原
+    initTiles();
+    const steps = size * size * 30;
+    let lastMove = -1;
+    for (let s = 0; s < steps; s++) {
+      const neighbors = getNeighbors(blankPos).filter(p => p !== lastMove);
+      const pick = neighbors[Math.floor(Math.random() * neighbors.length)];
+      // 交换空位与目标块
+      tiles[blankPos] = tiles[pick];
+      tiles[pick] = -1;
+      lastMove = blankPos;
+      blankPos = pick;
+    }
+    // 万一打乱后正好还原，再打一次
+    if (isSolved()) shuffleTiles();
+  }
+
+  // 某个位置上下左右相邻的位置
+  function getNeighbors(pos) {
+    const row = Math.floor(pos / size);
+    const col = pos % size;
+    const res = [];
+    if (row > 0) res.push(pos - size);
+    if (row < size - 1) res.push(pos + size);
+    if (col > 0) res.push(pos - 1);
+    if (col < size - 1) res.push(pos + 1);
+    return res;
+  }
+
+  function isSolved() {
+    for (let i = 0; i < tiles.length - 1; i++) {
+      if (tiles[i] !== i) return false;
+    }
+    return tiles[tiles.length - 1] === -1;
+  }
+
+  // 渲染棋盘
+  function renderBoard() {
+    board.innerHTML = '';
+    board.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+    board.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+    const img = PUZZLE_IMAGES[size];
+
+    tiles.forEach((tileIndex, pos) => {
+      const div = document.createElement('div');
+      div.className = 'tile';
+      if (tileIndex === -1) {
+        div.classList.add('blank');
+      } else {
+        const row = Math.floor(tileIndex / size);
+        const col = tileIndex % size;
+        div.style.backgroundImage = `url("${img}")`;
+        div.style.backgroundSize = `${size * 100}% ${size * 100}%`;
+        div.style.backgroundPosition = `${col * 100 / (size - 1)}% ${row * 100 / (size - 1)}%`;
+        div.addEventListener('click', () => onTileClick(pos));
+      }
+      board.appendChild(div);
+    });
+  }
+
+  // 点击拼图块：如果与空位相邻则滑动
+  function onTileClick(pos) {
+    if (solved) return;
+    const neighbors = getNeighbors(blankPos);
+    if (!neighbors.includes(pos)) return;  // 不相邻，不响应
+
+    // 交换
+    tiles[blankPos] = tiles[pos];
+    tiles[pos] = -1;
+    blankPos = pos;
+    renderBoard();
+
+    if (isSolved()) {
+      solved = true;
+      setTimeout(showWin, 300);
+    }
+  }
+
+  function showWin() {
+    winImg.src = WIN_IMAGES[size];
+    winOverlay.classList.add('show');
+  }
+
+  winOverlay.addEventListener('click', () => {
+    winOverlay.classList.remove('show');
+    // 关闭后回到难度选择
+    gamePage.classList.remove('show');
+    menuPage.style.display = 'block';
+  });
+
+  backBtn.addEventListener('click', () => {
+    gamePage.classList.remove('show');
+    menuPage.style.display = 'block';
+  });
+
+  shuffleBtn.addEventListener('click', () => {
+    solved = false;
+    winOverlay.classList.remove('show');
+    shuffleTiles();
+    renderBoard();
+  });
+</script>
+</body>
+</html>
